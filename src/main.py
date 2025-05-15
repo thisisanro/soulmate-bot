@@ -1,10 +1,8 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from dotenv import load_dotenv
-import os
+from config import TELEGRAM_BOT_TOKEN
 
-load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = TELEGRAM_BOT_TOKEN
 
 ASK_NAME = 0
 ASK_AGE = 1
