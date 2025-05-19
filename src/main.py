@@ -1,4 +1,4 @@
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes,
                           ConversationHandler, MessageHandler, filters)
 
@@ -79,7 +79,8 @@ async def ask_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
             GENDER_OPTIONS, one_time_keyboard=True, resize_keyboard=True
         )
         await update.message.reply_text(
-            "Please select your gender using the buttons provided:"
+            "Please select your gender using the buttons provided:",
+            reply_markup=reply_markup
         )
         return ASK_GENDER
     user_data[user_id]["gender"] = selected_gender
@@ -110,7 +111,8 @@ async def ask_looking_gender(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_data[user_id]["looking_gender"] = selected_gender
 
     await update.message.reply_text(
-        "What is the minimum age of your potential soulmate."
+        "What is the minimum age of your potential soulmate.",
+        reply_markup=ReplyKeyboardRemove()
     )
     return ASK_LOOKING_AGE_MIN
 
@@ -193,7 +195,7 @@ def main():
             ASK_LOOKING_AGE_MIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_looking_age_min)],
             ASK_LOOKING_AGE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_looking_age_max)],
             ASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
-            ASK_PHOTO: [MessageHandler(filters.PHOTO, ask_photo)],
+            ASK_PHOTO: [MessageHandler(filters.ALL & ~filters.COMMAND, ask_photo)],
         },
         fallbacks=[],
     )
