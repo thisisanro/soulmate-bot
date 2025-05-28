@@ -3,9 +3,11 @@ from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes,
                           ConversationHandler, MessageHandler, filters)
 
 from config import TELEGRAM_BOT_TOKEN
+from db import Database
 
 BOT_TOKEN = TELEGRAM_BOT_TOKEN
 
+# States
 (
     ASK_NAME,
     ASK_AGE,
@@ -16,21 +18,38 @@ BOT_TOKEN = TELEGRAM_BOT_TOKEN
     ASK_LOOKING_AGE_MAX,
     ASK_DESCRIPTION,
     ASK_PHOTO,
-    SHOW_PROFILE,
     COMPLETE_REG,
-) = range(11)
+    BROWSING,
+    MAIN_MENU_STATE,
+    INACTIVE_MENU_STATE,
+) = range(13)
 
-
+#Buttons
 GENDER_OPTIONS = [["Male", "Female"]]
 LOOKING_FOR_OPTIONS = [["Male", "Female", "Doesn't matter"]]
 CANCEL_REGISTRATION = [["Cancel"]]
 START = [["Start"]]
-CONFIRM_REGISTRATION = [["Start searching", "Change my profile"]]
+CONFIRM_REGISTRATION = [["Start searching", "Edit profile"]]
+BROWSING_OPTIONS = [["❤️ Like", "❌ Skip", "⚙️ Menu"]]
+MAIN_MENU = [["Continue searching", "Edit profile", "Deactivate account"]]
+CONTINUE_SEARCHING = [["Continue searching"]]
+INACTIVE_MENU = [["Activate account", "Edit profile"]]
 
+db = Database()
 user_data = {}
+current_profiles = {}
 
-
+# Registration
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if db.user_exists(user_id):
+        user_profile = db.get_user(user_id)
+        if user_profile["is_active"]:
+            return await show_main_menu(update, context)
+        else:
+            return await show_inactive_menu(update, context)
+        
     reply_markup = ReplyKeyboardMarkup(CANCEL_REGISTRATION, resize_keyboard=True)
     await update.message.reply_text(
         "Hi! Let's find your soulmate! What's your name?", reply_markup=reply_markup
@@ -243,13 +262,13 @@ async def ask_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message.photo:
         user_data[user_id]["photo"] = update.message.photo[-1].file_id
-        return await show_profile(update, context)
+        return await check_profile(update, context)
     else:
         await update.message.reply_text("Please send a photo.")
         return ASK_PHOTO
 
 
-async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def check_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     profile = user_data[user_id]
 
@@ -267,7 +286,7 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Looking for: {profile['looking_gender']}\n"
         f"Age range: {looking_age}\n"
         f"About: {profile['description']}\n\n"
-        f"Now you can start your searching or if you want to change something restart registration"
+        f"Now you can start your searching or if you want to edit something restart registration"
     )
 
     reply_markup = ReplyKeyboardMarkup(
@@ -282,14 +301,15 @@ async def complete_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = update.message.text
 
     if choice == "Start searching":
-        reply_markup = ReplyKeyboardRemove()
+        user_data[user_id]["user_id"] = user_id
+        db.save_user(user_data[user_id])
+        db.activate_user(user_id)
         await update.message.reply_text(
             "Your profile is now active. Good luck finding your soulmate!",
-            reply_markup=reply_markup,
         )
-        return ConversationHandler.END
+        return await start_browsing(update, context)
 
-    elif choice == "Change my profile":
+    elif choice == "Edit profile":
         return await start(update, context)
 
     else:
@@ -323,6 +343,177 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await start(update, context)
 
 
+#Browsing
+async def start_browsing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    potential_matches = db.find_potential_matches(user_id, 1)
+
+    if not potential_matches:
+        reply_markup = ReplyKeyboardMarkup([["⚙️ Menu", "🔄 Reset search"]], resize_keyboard=True)
+        await update.message.reply_text(
+            "No more profiles to show! You can reset your search to see profiles again, or go to menu.",
+            reply_markup=reply_markup
+        )
+        return BROWSING
+    
+    potential_match = potential_matches[0]
+    current_profiles[user_id] = potential_match
+
+    await show_profile(update, context, potential_match)
+    return BROWSING
+
+
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, profile, matched=False):
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=profile["photo"]
+    )
+
+    profile_text = (
+        f"{profile["name"]}, {profile["age"]}\n"
+        f"{profile["city"]}\n"
+        f"{profile["description"]}"
+    )
+
+    reply_markup = ReplyKeyboardMarkup(
+        CONTINUE_SEARCHING if matched else BROWSING_OPTIONS,
+        resize_keyboard=True
+    )
+    await update.message.reply_text(profile_text, reply_markup=reply_markup)
+
+
+async def handle_browsing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    choice = update.message.text
+
+    if choice == "Continue searching":
+        return await start_browsing(update, context)
+    
+    elif choice == "⚙️ Menu":
+        return await show_main_menu(update, context)
+    
+    elif choice == "🔄 Reset search":
+        db.reset_viewed_profiles(user_id)
+        await update.message.reply_text("Search reset! You'll see all profiles again.")
+        return await start_browsing(update, context)
+    
+    elif choice in ["❤️ Like", "❌ Skip"]:
+        if user_id not in current_profiles:
+            return await start_browsing(update, context)
+        
+        viewed_profile = current_profiles[user_id]
+        db.add_viewed_profile(user_id, viewed_profile["user_id"])
+
+        if choice == "❤️ Like":
+            is_match = db.add_like(user_id, viewed_profile["user_id"])
+
+            if is_match:
+                matched_chat = await context.bot.get_chat(viewed_profile["user_id"])
+                matched_username = matched_chat.username or "No username"
+                matched_user = db.get_user(viewed_profile["user_id"])
+
+                await show_profile(update, context, matched_user, True)
+                await update.message.reply_text(
+                    f"🎉 It's a match with {viewed_profile['name']} (@{matched_username})!"
+                    f"You can now start chatting!"
+                )
+            else:
+                await update.message.reply_text("👍")
+
+        elif choice == "❌ Skip":
+            await update.message.reply_text("❌")
+        
+        return await start_browsing(update, context)
+    
+    else:
+        reply_markup = ReplyKeyboardMarkup(BROWSING_OPTIONS, resize_keyboard=True)
+        await update.message.reply_text(
+            "Please use the buttons provided.", reply_markup=reply_markup
+        )
+        return BROWSING
+
+
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_profile = db.get_user(user_id)
+
+    if not user_profile:
+        return await start(update, context)
+    
+    reply_markup = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+    await update.message.reply_text(
+        "Please use buttons provided.",
+        reply_markup=reply_markup
+    )
+    return MAIN_MENU_STATE
+
+
+async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    choice = update.message.text
+
+    if choice == "Continue searching":
+        return await start_browsing(update, context)
+    
+    elif choice == "Edit profile":
+        db.deactivate_user(user_id)
+        if user_id in user_data:
+            del user_data[user_id]
+        return await start(update, context)
+    
+    elif choice == "Deactivate account":
+        db.deactivate_user(user_id)
+        await update.message.reply_text(
+            "Your account has been deactivated. Your profile won't be shown to others."
+        )
+        return await show_inactive_menu(update, context)
+    
+    else:
+        reply_markup = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        await update.message.reply_text(
+            "Please use buttons provided.", reply_markup=reply_markup
+        )
+        return MAIN_MENU_STATE
+
+
+async def show_inactive_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_pofile = db.get_user(user_id)
+
+    if not user_pofile:
+        return await start(update, context)
+    
+    reply_markup = ReplyKeyboardMarkup(INACTIVE_MENU, resize_keyboard=True)
+    await update.message.reply_text("Please use buttons provided.", reply_markup=reply_markup)
+    return INACTIVE_MENU_STATE
+    
+    
+async def handle_inactive_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    choice = update.message.text
+
+    if choice == "Activate account":
+        db.activate_user(user_id)
+        await update.message.reply_text(
+            "🎉 Welcome back! Your profile is now visible to others again."
+        )
+        return await show_main_menu(update, context)
+    
+    elif choice == "Edit profile":
+        db.deactivate_user(user_id)
+        if user_id in user_data:
+            del user_data[user_id]
+        return await start(update, context)
+    
+    else:
+        reply_markup = ReplyKeyboardMarkup(INACTIVE_MENU, resize_keyboard=True)
+        await update.message.reply_text(
+            "Please use the buttons provided.", reply_markup=reply_markup
+        )
+        return MAIN_MENU_STATE
+
+
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -351,6 +542,13 @@ def main():
             ASK_PHOTO: [MessageHandler(filters.ALL & ~filters.COMMAND, ask_photo)],
             COMPLETE_REG: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, complete_reg)
+            ],
+            BROWSING: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_browsing)],
+            MAIN_MENU_STATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)
+            ],
+            INACTIVE_MENU_STATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_inactive_menu)
             ],
         },
         fallbacks=[
