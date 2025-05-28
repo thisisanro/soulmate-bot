@@ -460,7 +460,16 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.deactivate_user(user_id)
         if user_id in user_data:
             del user_data[user_id]
-        return await start(update, context)
+        
+        user_data[user_id] = {}
+
+        reply_markup = ReplyKeyboardMarkup(CANCEL_REGISTRATION, resize_keyboard=True)
+        await update.message.reply_text(
+            "Let's update your profile! What's you name?",
+            reply_markup=reply_markup
+        )
+
+        return ASK_NAME
     
     elif choice == "Deactivate account":
         db.deactivate_user(user_id)
@@ -504,14 +513,23 @@ async def handle_inactive_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         db.deactivate_user(user_id)
         if user_id in user_data:
             del user_data[user_id]
-        return await start(update, context)
+        
+        user_data[user_id] = {}
+
+        reply_markup = ReplyKeyboardMarkup(CANCEL_REGISTRATION, resize_keyboard=True)
+        await update.message.reply_text(
+            "Let's update your profile! What's you name?",
+            reply_markup=reply_markup
+        )
+
+        return ASK_NAME
     
     else:
         reply_markup = ReplyKeyboardMarkup(INACTIVE_MENU, resize_keyboard=True)
         await update.message.reply_text(
             "Please use the buttons provided.", reply_markup=reply_markup
         )
-        return MAIN_MENU_STATE
+        return INACTIVE_MENU_STATE
 
 
 def main():
