@@ -1,4 +1,4 @@
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes,
                           ConversationHandler, MessageHandler, filters)
 
@@ -31,7 +31,7 @@ CANCEL_REGISTRATION = [["Cancel"]]
 START = [["Start"]]
 CONFIRM_REGISTRATION = [["Start searching", "Edit profile"]]
 BROWSING_OPTIONS = [["❤️ Like", "❌ Skip", "⚙️ Menu"]]
-MAIN_MENU = [["Continue searching", "Edit profile", "Deactivate account"]]
+MAIN_MENU = [["Continue searching"], ["Edit profile"], ["Deactivate account"]]
 CONTINUE_SEARCHING = [["Continue searching"]]
 INACTIVE_MENU = [["Activate account", "Edit profile"]]
 

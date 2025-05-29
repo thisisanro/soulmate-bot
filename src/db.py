@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 class Database:
-    def __init__(self, db_name: str = "dating_bot.db"):
+    def __init__(self, db_name: str = "soulmate.db"):
         self.db_name = db_name
         self.init_database()
     
