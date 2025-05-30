@@ -303,7 +303,7 @@ async def complete_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if choice == "Start searching":
         user_data[user_id]["user_id"] = user_id
         db.save_user(user_data[user_id])
-        db.activate_user(user_id)
+        db.give_user_fresh_start(user_id)
         await update.message.reply_text(
             "Your profile is now active. Good luck finding your soulmate!",
         )
@@ -543,7 +543,7 @@ async def handle_inactive_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     choice = update.message.text
 
     if choice == "Activate account":
-        db.activate_user(user_id)
+        db.give_user_fresh_start(user_id)
         await update.message.reply_text(
             "🎉 Welcome back! Your profile is now visible to others again."
         )

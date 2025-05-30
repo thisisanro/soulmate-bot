@@ -294,3 +294,43 @@ class Database:
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             return False
+
+    def clear_all_user_interactions(self, user_id: int) -> bool:
+        """Clear all interactions for a user - gives them a completely fresh start"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                
+                # Remove all likes FROM this user to others
+                cursor.execute('DELETE FROM likes WHERE from_user_id = ?', (user_id,))
+                
+                # Remove all likes TO this user from others
+                cursor.execute('DELETE FROM likes WHERE to_user_id = ?', (user_id,))
+                
+                # Remove all matches involving this user
+                cursor.execute('DELETE FROM matches WHERE user1_id = ? OR user2_id = ?', (user_id, user_id))
+                
+                # Remove all viewed profiles BY this user (so they can see everyone again)
+                cursor.execute('DELETE FROM viewed_profiles WHERE viewer_id = ?', (user_id,))
+                
+                # Remove all viewed profiles OF this user (so others can see them again)
+                cursor.execute('DELETE FROM viewed_profiles WHERE viewed_id = ?', (user_id,))
+                
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+            return False
+
+    def give_user_fresh_start(self, user_id: int) -> bool:
+        """Give user a completely fresh start - clear interactions and activate"""
+        try:
+            # Clear all interactions first
+            if not self.clear_all_user_interactions(user_id):
+                return False
+            
+            # Activate the user
+            return self.activate_user(user_id)
+        except Exception as e:
+            print(f"Error giving fresh start: {e}")
+            return False
