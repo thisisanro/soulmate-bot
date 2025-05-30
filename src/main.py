@@ -459,7 +459,7 @@ async def handle_browsing(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # If the user is no longer available (deleted account, blocked bot, etc.)
                     print(f"Couldn't send match notification to user {viewed_profile['user_id']}: {e}")
             else:
-                await update.message.reply_text("👍")
+                await update.message.reply_text("❤️")
 
         elif choice == "❌ Skip":
             await update.message.reply_text("❌")
