@@ -409,15 +409,55 @@ async def handle_browsing(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_match = db.add_like(user_id, viewed_profile["user_id"])
 
             if is_match:
-                matched_chat = await context.bot.get_chat(viewed_profile["user_id"])
-                matched_username = matched_chat.username or "No username"
+                current_user = db.get_user(user_id)
                 matched_user = db.get_user(viewed_profile["user_id"])
 
+                #get usernames for both users
+                try:
+                    current_user_chat = await context.bot.get_chat(user_id)
+                    current_username = current_user_chat.username or "No username"
+                except:
+                    current_username = "No username"
+                
+                try:
+                    matched_user_chat = await context.bot.get_chat(viewed_profile["user_id"])
+                    matched_username = matched_user_chat.username or "No username"
+                except:
+                    matched_username = "No username"
+
+                # show match to user who just liked
                 await show_profile(update, context, matched_user, True)
                 await update.message.reply_text(
-                    f"🎉 It's a match with {viewed_profile['name']} (@{matched_username})!"
+                    f"🎉 It's a match with {matched_user['name']} (@{matched_username})! "
                     f"You can now start chatting!"
                 )
+
+                # show match to the other user
+                try:
+                    await context.bot.send_photo(
+                        chat_id=viewed_profile["user_id"],
+                        photo=current_user["photo"]
+                    )
+
+                    profile_text = (
+                        f"{current_user['name']}, {current_user['age']}\n"
+                        f"{current_user['city']}\n"
+                        f"{current_user['description']}"
+                    )
+                    
+                    await context.bot.send_message(
+                        chat_id=viewed_profile["user_id"],
+                        text=profile_text
+                    )
+                    
+                    await context.bot.send_message(
+                        chat_id=viewed_profile["user_id"],
+                        text=f"🎉 It's a match with {current_user['name']} (@{current_username})! "
+                             f"You can now start chatting!"
+                    )
+                except Exception as e:
+                    # if the user is no longer available (deleted account, blocked bot, etc.)
+                    print(f"Couldn't send match notification to user {viewed_profile['user_id']}: {e}")
             else:
                 await update.message.reply_text("👍")
 
